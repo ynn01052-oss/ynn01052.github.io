@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轉盤抽籤</title>
+<style>
+  :root{
+    --ink:#2B2115;
+    --paper:#F1E4C4;
+    --red:#9E2A2B;
+    --red-deep:#7A1F20;
+    --gold:#C9A227;
+    --jade:#3F6E5B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(201,162,39,0.10), transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(158,42,43,0.12), transparent 50%),
+      var(--paper);
+    font-family:"PingFang TC","Noto Serif TC","Microsoft JhengHei",serif;
+    color:var(--ink);
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:32px 18px 60px;}
+  header{text-align:center;margin-bottom:24px;}
+  header .eyebrow{letter-spacing:0.4em;font-size:12px;color:var(--red-deep);font-weight:600;}
+  header h1{font-size:42px;margin:6px 0 4px;letter-spacing:0.15em;}
+  header p{margin:0;color:#6b5a3d;font-size:14px;}
+
+  .stage{display:grid;grid-template-columns:1fr 1.2fr;gap:26px;align-items:start;}
+  @media (max-width:760px){.stage{grid-template-columns:1fr;}}
+
+  .panel{
+    background:rgba(255,251,240,0.55);
+    border:1px solid rgba(43,33,21,0.12);
+    border-radius:14px;
+    padding:20px;
+  }
+  .panel h2{
+    font-size:14px;letter-spacing:0.15em;margin:0 0 12px;
+    color:var(--red-deep);border-left:4px solid var(--gold);padding-left:8px;
+  }
+  textarea{
+    width:100%;min-height:200px;resize:vertical;padding:12px;
+    border-radius:8px;border:1px solid rgba(43,33,21,0.2);
+    background:#FFFDF6;font-family:inherit;font-size:15px;line-height:1.6;color:var(--ink);
+  }
+  .row{display:flex;gap:14px;align-items:center;margin-top:12px;flex-wrap:wrap;font-size:13px;}
+  .row label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  .hint{color:#8a7a58;font-size:12px;margin-top:8px;}
+
+  .wheel-area{display:flex;flex-direction:column;align-items:center;}
+  .wheel-box{
+    position:relative;
+    width:100%;
+    max-width:400px;
+    aspect-ratio:1/1;
+  }
+  canvas{width:100%;height:100%;display:block;}
+  .pointer{
+    position:absolute;
+    top:-6px;left:50%;
+    transform:translateX(-50%);
+    width:0;height:0;
+    border-left:16px solid transparent;
+    border-right:16px solid transparent;
+    border-top:34px solid var(--ink);
+    filter:drop-shadow(0 3px 2px rgba(0,0,0,0.3));
+    z-index:2;
+  }
+  .hub{
+    position:absolute;
+    top:50%;left:50%;
+    width:21%;height:21%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    border:4px solid var(--gold);
+    background:radial-gradient(circle at 35% 30%, #c43c3d, var(--red-deep));
+    color:#FFF7E6;
+    font-family:inherit;
+    font-size:clamp(14px,3.6vw,20px);
+    font-weight:700;
+    letter-spacing:0.1em;
+    cursor:pointer;
+    box-shadow:0 4px 10px rgba(0,0,0,0.35);
+    z-index:3;
+  }
+  .hub:disabled{opacity:0.6;cursor:not-allowed;}
+
+  .result-card{
+    margin-top:22px;width:100%;max-width:400px;
+    background:#FFFCF2;border:1px solid rgba(43,33,21,0.15);
+    border-radius:10px;padding:14px 18px;text-align:center;
+  }
+  .result-card .label{font-size:11px;letter-spacing:0.3em;color:var(--jade);margin-bottom:6px;}
+  .result-card .name{font-size:30px;font-weight:700;color:var(--red-deep);word-break:break-word;}
+  .result-card.empty .name{font-size:15px;color:#a1936f;font-weight:400;}
+
+  .history{margin-top:16px;width:100%;max-width:400px;}
+  .history h3{font-size:13px;letter-spacing:0.15em;color:var(--red-deep);margin:0 0 6px;}
+  .history ol{margin:0;padding-left:20px;font-size:14px;line-height:1.9;max-height:120px;overflow-y:auto;}
+  .empty-hint{color:#a1936f;font-size:13px;}
+  .reset-btn{
+    margin-top:10px;background:none;border:none;color:#8a6a2f;
+    text-decoration:underline;cursor:pointer;font-size:13px;font-family:inherit;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">轉一轉 · 看天意</div>
+    <h1>轉 盤 抽 籤</h1>
+    <p>輸入選項，按下中間的按鈕開始旋轉</p>
+  </header>
+
+  <div class="stage">
+    <div class="panel">
+      <h2>選項設定</h2>
+      <textarea id="namesInput" placeholder="每行輸入一個選項">小明
+小華
+小美
+阿強
+小芳
+小玲</textarea>
+      <div class="row">
+        <label><input type="checkbox" id="removeAfter"> 抽中後移出轉盤</label>
+      </div>
+      <div class="hint" id="countHint"></div>
+    </div>
+
+    <div class="panel wheel-area">
+      <div class="wheel-box">
+        <div class="pointer"></div>
+        <canvas id="wheel"></canvas>
+        <button class="hub" id="spinBtn">轉</button>
+      </div>
+
+      <div class="result-card empty" id="resultCard">
+        <div class="label">結 果</div>
+        <div class="name" id="resultName">尚未抽籤</div>
+      </div>
+
+      <div class="history">
+        <h3>抽籤紀錄</h3>
+        <ol id="historyList"></ol>
+        <div class="empty-hint" id="historyEmpty">目前還沒有紀錄</div>
+      </div>
+      <button class="reset-btn" id="resetBtn">清除紀錄並還原選項</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+const namesInput = document.getElementById('namesInput');
+const removeAfter = document.getElementById('removeAfter');
+const countHint = document.getElementById('countHint');
+const spinBtn = document.getElementById('spinBtn');
+const resetBtn = document.getElementById('resetBtn');
+const resultCard = document.getElementById('resultCard');
+const resultName = document.getElementById('resultName');
+const historyList = document.getElementById('historyList');
+const historyEmpty = document.getElementById('historyEmpty');
+
+const COLORS = ['#9E2A2B','#3F6E5B','#B8862B','#6B4A22','#2F5D7C','#7A1F20'];
+const TAU = Math.PI * 2;
+
+let items = [];
+let rotation = 0;      // 目前旋轉角度（弧度）
+let spinning = false;
+let history = [];
+
+function parseNames(){
+  return namesInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+}
+
+function setupCanvas(){
+  const size = canvas.getBoundingClientRect().width;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw();
+}
+
+function colorFor(i, n){
+  let c = i % COLORS.length;
+  // 避免最後一格與第一格同色相鄰
+  if (i === n - 1 && n > 1 && c === 0) c = 3;
+  return COLORS[c];
+}
+
+function draw(){
+  const size = canvas.getBoundingClientRect().width;
+  const cx = size / 2, cy = size / 2;
+  const radius = size / 2 - 8;
+  ctx.clearRect(0, 0, size, size);
+
+  // 外框
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 4, 0, TAU);
+  ctx.fillStyle = '#C9A227';
+  ctx.fill();
+
+  const n = items.length;
+  if (n === 0){
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, TAU);
+    ctx.fillStyle = '#E4D2A3';
+    ctx.fill();
+    ctx.fillStyle = '#8a7a58';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('請先輸入選項', cx, cy - 50);
+    return;
+  }
+
+  const arc = TAU / n;
+  for (let i = 0; i < n; i++){
+    const start = rotation + i * arc;
+    const end = start + arc;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.closePath();
+    ctx.fillStyle = colorFor(i, n);
+    ctx.fill();
+    ctx.strokeStyle = '#F1E4C4';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 文字
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(start + arc / 2);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#FFF7E6';
+    const fontSize = Math.max(11, Math.min(22, radius * 0.11, (radius * arc) * 0.5));
+    ctx.font = `700 ${fontSize}px "PingFang TC","Microsoft JhengHei",sans-serif`;
+    let label = items[i];
+    const maxChars = 8;
+    if (label.length > maxChars) label = label.slice(0, maxChars - 1) + '…';
+    ctx.fillText(label, radius - 14, 0);
+    ctx.restore();
+  }
+
+  // 內圈裝飾
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, TAU);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#2B2115';
+  ctx.stroke();
+}
+
+function updateHint(){
+  countHint.textContent = `轉盤上目前有 ${items.length} 個選項`;
+}
+
+function renderHistory(){
+  historyList.innerHTML = '';
+  historyEmpty.style.display = history.length ? 'none' : 'block';
+  history.forEach(name => {
+    const li = document.createElement('li');
+    li.textContent = name;
+    historyList.appendChild(li);
+  });
+  historyList.scrollTop = historyList.scrollHeight;
+}
+
+function reloadItems(){
+  items = parseNames();
+  rotation = 0;
+  updateHint();
+  draw();
+}
+
+namesInput.addEventListener('input', reloadItems);
+
+function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
+function spin(){
+  if (spinning || items.length === 0) return;
+  spinning = true;
+  spinBtn.disabled = true;
+
+  const n = items.length;
+  const arc = TAU / n;
+
+  // 先決定贏家，再算出要停的角度（指針在正上方 = 3π/2）
+  const winner = Math.floor(Math.random() * n);
+  const offset = 0.12 + Math.random() * 0.76;           // 落在格子內的位置，避免壓線
+  const targetMod = ((1.5 * Math.PI - (winner + offset) * arc) % TAU + TAU) % TAU;
+  const currentMod = ((rotation % TAU) + TAU) % TAU;
+  const delta = ((targetMod - currentMod) % TAU + TAU) % TAU + TAU * (5 + Math.floor(Math.random() * 3));
+
+  const startRot = rotation;
+  const duration = 4800;
+  const t0 = performance.now();
+
+  function frame(now){
+    const t = Math.min(1, (now - t0) / duration);
+    rotation = startRot + delta * easeOutCubic(t);
+    draw();
+    if (t < 1){
+      requestAnimationFrame(frame);
+    } else {
+      finish(winner);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function finish(winnerIdx){
+  const name = items[winnerIdx];
+  resultCard.classList.remove('empty');
+  resultName.textContent = name;
+  history.push(name);
+  renderHistory();
+
+  if (removeAfter.checked){
+    items.splice(winnerIdx, 1);
+    rotation = 0;
+    updateHint();
+    draw();
+  }
+  spinning = false;
+  spinBtn.disabled = false;
+}
+
+spinBtn.addEventListener('click', spin);
+
+resetBtn.addEventListener('click', () => {
+  if (spinning) return;
+  history = [];
+  renderHistory();
+  resultCard.classList.add('empty');
+  resultName.textContent = '尚未抽籤';
+  reloadItems();
+});
+
+window.addEventListener('resize', setupCanvas);
+
+items = parseNames();
+updateHint();
+renderHistory();
+setupCanvas();
+</script>
+</body>
+</html>
